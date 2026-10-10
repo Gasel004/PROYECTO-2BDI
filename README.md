@@ -1,7 +1,9 @@
 # Proyecto II: Gestión de eventos
 
 Proyecto académico del curso **Bases de Datos 1**, el cúal permite administrar eventos, organizadores, tipos de evento, ubicaciones y recursos, cada evento puede asociarse con varios recursos y cantidades mediante una relación maestro-detalle
-
+##
+- Enlance al video: [text](https://youtu.be/bpWPFkX-HmI)
+- 
 ## Tecnologías
 
 - PostgreSQL
@@ -47,5 +49,3 @@ Proyecto académico del curso **Bases de Datos 1**, el cúal permite administrar
 - 7690-22-11804
 - Bases de datos l "B"
 
-##
-- Enlance al video: [text](https://youtu.be/bpWPFkX-HmI)
