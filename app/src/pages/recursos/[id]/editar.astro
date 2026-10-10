@@ -1,0 +1,43 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import CatalogForm from '../../../components/CatalogForm.astro';
+import { query } from '../../../lib/db.js';
+import { describirError } from '../../../lib/errores.js';
+import { texto } from '../../../lib/formularios.js';
+
+const id = Number(Astro.params.id);
+const campos = [
+  { nombre: 'nombre', etiqueta: 'Nombre', requerido: true, maxlength: 80 },
+  { nombre: 'descripcion', etiqueta: 'Descripción', tipo: 'textarea', opcional: true, maxlength: 200 },
+  { nombre: 'cantidad_total', etiqueta: 'Cantidad total', tipo: 'number', requerido: true, min: 1 },
+  { nombre: 'disponible', etiqueta: 'Estado del recurso', tipo: 'checkbox', ayuda: 'El recurso está en servicio.' },
+];
+let valores = null;
+let error = null;
+if (Number.isSafeInteger(id) && id > 0) {
+  if (Astro.request.method === 'POST') {
+    const datos = await Astro.request.formData();
+    valores = {
+      nombre: texto(datos, 'nombre'), descripcion: texto(datos, 'descripcion'),
+      cantidad_total: texto(datos, 'cantidad_total'), disponible: datos.get('disponible') === 'true',
+    };
+    try {
+      const result = await query(
+        'UPDATE recurso SET nombre = $1, descripcion = $2, cantidad_total = $3, disponible = $4 WHERE id_recurso = $5',
+        [valores.nombre, valores.descripcion, valores.cantidad_total, valores.disponible, id],
+      );
+      if (result.rowCount) return Astro.redirect('/recursos?ok=actualizado', 303);
+      valores = null;
+    } catch (err) { error = describirError(err); }
+  } else {
+    const result = await query('SELECT nombre, descripcion, cantidad_total, disponible FROM recurso WHERE id_recurso = $1', [id]);
+    valores = result.rows[0] ?? null;
+  }
+}
+if (!valores) Astro.response.status = 404;
+---
+
+<Layout titulo="Editar recurso">
+  <div class="encabezado"><div><h1>Editar recurso</h1><p>Actualiza inventario, descripción o disponibilidad.</p></div></div>
+  {valores ? <CatalogForm campos={campos} valores={valores} error={error} textoBoton="Guardar cambios" cancelar="/recursos" /> : <div class="panel"><p>El recurso no existe.</p><a href="/recursos">Volver al listado</a></div>}
+</Layout>

@@ -1,0 +1,42 @@
+---
+// Formulario compartido por "nuevo" y "editar".
+const { valores, error, textoBoton = 'Guardar' } = Astro.props;
+---
+
+{
+  error && (
+    <div class="alerta error" role="alert">
+      <strong>{error.resumen}</strong>
+      {error.tecnico && <code>{error.tecnico}</code>}
+    </div>
+  )
+}
+
+<!-- Los campos requeridos se verifican en el navegador; las reglas de integridad adicionales las aplica PostgreSQL. -->
+<form method="POST" class="formulario compacto">
+  <label>
+    Nombre
+    <input name="nombre" value={valores.nombre ?? ''} maxlength="80" autocomplete="given-name" required />
+  </label>
+  <label>
+    Apellido
+    <input name="apellido" value={valores.apellido ?? ''} maxlength="80" autocomplete="family-name" required />
+  </label>
+  <label>
+    Correo
+    <input type="email" name="correo" value={valores.correo ?? ''} maxlength="120" autocomplete="email" required />
+  </label>
+  <label>
+    Teléfono <span class="opcional">(opcional)</span>
+    <input type="tel" name="telefono" value={valores.telefono ?? ''} maxlength="20" autocomplete="tel" />
+  </label>
+  <label>
+    Cargo <span class="opcional">(opcional)</span>
+    <input name="cargo" value={valores.cargo ?? ''} maxlength="80" />
+  </label>
+
+  <div class="acciones">
+    <button type="submit">{textoBoton}</button>
+    <a class="boton secundario" href="/organizadores">Cancelar</a>
+  </div>
+</form>

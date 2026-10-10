@@ -1,0 +1,39 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import OrganizadorForm from '../../components/OrganizadorForm.astro';
+import { query } from '../../lib/db.js';
+import { describirError } from '../../lib/errores.js';
+import { texto } from '../../lib/formularios.js';
+
+let valores = { nombre: '', apellido: '', correo: '', telefono: '', cargo: '' };
+let error = null;
+
+// INSERT
+if (Astro.request.method === 'POST') {
+  const datos = await Astro.request.formData();
+  valores = {
+    nombre: texto(datos, 'nombre'),
+    apellido: texto(datos, 'apellido'),
+    correo: texto(datos, 'correo'),
+    telefono: texto(datos, 'telefono'),
+    cargo: texto(datos, 'cargo'),
+  };
+  try {
+    await query(
+      `INSERT INTO organizador (nombre, apellido, correo, telefono, cargo)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [valores.nombre, valores.apellido, valores.correo, valores.telefono, valores.cargo],
+    );
+    return Astro.redirect('/organizadores?ok=creado', 303);
+  } catch (err) {
+    error = describirError(err);
+  }
+}
+---
+
+<Layout titulo="Nuevo organizador">
+  <div class="encabezado">
+    <div><h1>Nuevo organizador</h1><p>Registra a la persona responsable de uno o varios eventos.</p></div>
+  </div>
+  <OrganizadorForm valores={valores} error={error} textoBoton="Registrar organizador" />
+</Layout>

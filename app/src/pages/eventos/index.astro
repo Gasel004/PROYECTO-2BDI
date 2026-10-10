@@ -1,0 +1,105 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import Alert from '../../components/Alert.astro';
+import { query } from '../../lib/db.js';
+import { describirError } from '../../lib/errores.js';
+import { fechaAISO, fechaISOValida, enteroPositivo } from '../../lib/validaciones.js';
+
+let error = null;
+if (Astro.request.method === 'POST') {
+  const datos = await Astro.request.formData();
+  const id = enteroPositivo(String(datos.get('id') ?? ''));
+  if (datos.get('accion') === 'eliminar' && id) {
+    try {
+      await query('DELETE FROM evento WHERE id_evento = $1', [id]);
+      return Astro.redirect('/eventos?ok=eliminado', 303);
+    } catch (err) { error = describirError(err); }
+  }
+}
+
+const tipos = await query('SELECT id_tipo_evento, nombre FROM tipo_evento ORDER BY nombre');
+const desde = Astro.url.searchParams.get('desde') ?? '';
+const hasta = Astro.url.searchParams.get('hasta') ?? '';
+const tipoParam = Astro.url.searchParams.get('tipo') ?? '';
+const proximos = Astro.url.searchParams.get('proximos') === '1';
+const filtros = [];
+const parametros = [];
+if (desde && !fechaISOValida(desde)) error = { resumen: 'La fecha inicial no es válida.' };
+if (hasta && !fechaISOValida(hasta)) error = { resumen: 'La fecha final no es válida.' };
+if (desde && hasta && fechaISOValida(desde) && fechaISOValida(hasta) && desde > hasta) error = { resumen: 'La fecha inicial debe ser anterior o igual a la fecha final.' };
+if (tipoParam && !enteroPositivo(tipoParam)) error = { resumen: 'Selecciona un tipo de evento válido.' };
+if (proximos) filtros.push(`e.fecha >= CURRENT_DATE AND e.estado <> 'Cancelado'`);
+if (desde && fechaISOValida(desde)) {
+  parametros.push(desde);
+  filtros.push(`e.fecha >= $${parametros.length}::date`);
+}
+if (hasta && fechaISOValida(hasta)) {
+  parametros.push(hasta);
+  filtros.push(`e.fecha <= $${parametros.length}::date`);
+}
+if (tipoParam && enteroPositivo(tipoParam)) {
+  parametros.push(Number(tipoParam));
+  filtros.push(`e.id_tipo_evento = $${parametros.length}`);
+}
+const resultadoEventos = await query(
+  `SELECT e.id_evento, e.nombre, e.fecha, e.hora_inicio, e.hora_fin, e.estado,
+          t.nombre AS tipo, o.nombre AS nombre_organizador, o.apellido AS apellido_organizador,
+          u.nombre AS ubicacion,
+          COALESCE(string_agg(r.nombre || ' × ' || er.cantidad::text, ', ' ORDER BY r.nombre), 'Sin recursos') AS recursos
+   FROM evento e
+   JOIN tipo_evento t ON t.id_tipo_evento = e.id_tipo_evento
+   JOIN organizador o ON o.id_organizador = e.id_organizador
+   JOIN ubicacion u ON u.id_ubicacion = e.id_ubicacion
+   LEFT JOIN evento_recurso er ON er.id_evento = e.id_evento
+   LEFT JOIN recurso r ON r.id_recurso = er.id_recurso
+   ${filtros.length ? `WHERE ${filtros.join(' AND ')}` : ''}
+   GROUP BY e.id_evento, t.nombre, o.nombre, o.apellido, u.nombre
+   ORDER BY e.fecha, e.hora_inicio`,
+  parametros,
+);
+const rows = resultadoEventos.rows.map((evento) => ({ ...evento, fecha: fechaAISO(evento.fecha) }));
+const okMensajes = { creado: 'Evento creado.', actualizado: 'Cambios guardados.', eliminado: 'Evento eliminado.' };
+const ok = okMensajes[Astro.url.searchParams.get('ok')] ?? '';
+---
+
+<Layout titulo="Eventos">
+  <div class="encabezado">
+    <div><h1>Eventos</h1><p>Consulta, filtra y administra los eventos y sus recursos.</p></div>
+    <a class="boton" href="/eventos/nuevo">Nuevo evento</a>
+  </div>
+  <Alert error={error} ok={ok} />
+  <form method="GET" class="filtros panel">
+    <label>Desde<input type="date" name="desde" value={desde} /></label>
+    <label>Hasta<input type="date" name="hasta" value={hasta} /></label>
+    <label>Tipo de evento
+      <select name="tipo"><option value="">Todos los tipos</option>
+        {tipos.rows.map((tipo) => <option value={tipo.id_tipo_evento} selected={String(tipo.id_tipo_evento) === tipoParam}>{tipo.nombre}</option>)}
+      </select>
+    </label>
+    <button type="submit">Filtrar</button>
+    {(desde || hasta || tipoParam || proximos) && <a class="boton secundario" href="/eventos">Limpiar</a>}
+  </form>
+  {rows.length ? (
+    <div class="tabla-contenedor"><table>
+      <thead><tr><th>Evento</th><th>Fecha y horario</th><th>Tipo</th><th>Organizador</th><th>Ubicación</th><th>Recursos</th><th>Estado</th><th>Acciones</th></tr></thead>
+      <tbody>{rows.map((evento) => (
+        <tr>
+          <td><a href={`/eventos/${evento.id_evento}`}><strong>{evento.nombre}</strong></a></td>
+          <td>{evento.fecha}<div class="ayuda">{evento.hora_inicio?.slice(0, 5)}{evento.hora_fin ? `–${evento.hora_fin.slice(0, 5)}` : ''}</div></td>
+          <td>{evento.tipo}</td>
+          <td>{evento.nombre_organizador} {evento.apellido_organizador}</td>
+          <td>{evento.ubicacion}</td>
+          <td class="detalle-recursos">{evento.recursos}</td>
+          <td><span class={`etiqueta ${evento.estado === 'Cancelado' ? 'no' : evento.estado === 'Finalizado' ? '' : 'ok'}`}>{evento.estado}</span></td>
+          <td><div class="acciones">
+            <a class="boton secundario" href={`/eventos/${evento.id_evento}/editar`}>Editar</a>
+            <form method="POST" onsubmit="return confirm('¿Eliminar el evento y sus detalles de recursos?');">
+              <input type="hidden" name="accion" value="eliminar" /><input type="hidden" name="id" value={evento.id_evento} />
+              <button class="peligro" type="submit">Eliminar</button>
+            </form>
+          </div></td>
+        </tr>
+      ))}</tbody>
+    </table></div>
+  ) : <div class="panel vacio">No hay eventos que coincidan con estos filtros.</div>}
+</Layout>

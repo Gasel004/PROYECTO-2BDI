@@ -1,0 +1,33 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import CatalogForm from '../../components/CatalogForm.astro';
+import { query } from '../../lib/db.js';
+import { describirError } from '../../lib/errores.js';
+import { texto } from '../../lib/formularios.js';
+
+const campos = [
+  { nombre: 'nombre', etiqueta: 'Nombre', requerido: true, maxlength: 80 },
+  { nombre: 'descripcion', etiqueta: 'Descripción', tipo: 'textarea', opcional: true, maxlength: 200 },
+  { nombre: 'cantidad_total', etiqueta: 'Cantidad total', tipo: 'number', requerido: true, min: 1 },
+  { nombre: 'disponible', etiqueta: 'Estado del recurso', tipo: 'checkbox', ayuda: 'El recurso está en servicio.' },
+];
+let valores = { nombre: '', descripcion: '', cantidad_total: '', disponible: true };
+let error = null;
+if (Astro.request.method === 'POST') {
+  const datos = await Astro.request.formData();
+  valores = {
+    nombre: texto(datos, 'nombre'), descripcion: texto(datos, 'descripcion'),
+    cantidad_total: texto(datos, 'cantidad_total'), disponible: datos.get('disponible') === 'true',
+  };
+  try {
+    await query('INSERT INTO recurso (nombre, descripcion, cantidad_total, disponible) VALUES ($1, $2, $3, $4)',
+      [valores.nombre, valores.descripcion, valores.cantidad_total, valores.disponible]);
+    return Astro.redirect('/recursos?ok=creado', 303);
+  } catch (err) { error = describirError(err); }
+}
+---
+
+<Layout titulo="Nuevo recurso">
+  <div class="encabezado"><div><h1>Nuevo recurso</h1><p>Registra un recurso y la cantidad que administra la institución.</p></div></div>
+  <CatalogForm campos={campos} valores={valores} error={error} textoBoton="Crear recurso" cancelar="/recursos" />
+</Layout>

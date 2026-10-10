@@ -1,0 +1,9 @@
+# Generated output and local-only material
+/mnt/
+/app/.agents/
+/app/.astro/
+/app/dist/
+/app/node_modules/
+/app/.env
+/app/.env.*
+!/app/.env.example

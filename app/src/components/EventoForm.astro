@@ -1,0 +1,107 @@
+---
+const {
+  valores = {},
+  tipos = [],
+  organizadores = [],
+  ubicaciones = [],
+  recursos = [],
+  cantidades = {},
+  error = null,
+  textoBoton = 'Guardar evento',
+} = Astro.props;
+
+const estados = ['Programado', 'En curso', 'Finalizado', 'Cancelado'];
+---
+
+{error && (
+  <div class="alerta error" role="alert">
+    <strong>{error.resumen}</strong>
+    {error.tecnico && <code>{error.tecnico}</code>}
+  </div>
+)}
+
+{(!tipos.length || !organizadores.length || !ubicaciones.length) && (
+  <div class="alerta error" role="status">Para registrar un evento primero necesitas al menos un tipo, un organizador y una ubicación.</div>
+)}
+
+<form method="POST" class="formulario">
+  <div class="rejilla">
+    <label>Nombre del evento
+      <input name="nombre" value={valores.nombre ?? ''} maxlength="120" required />
+    </label>
+    <label>Tipo de evento
+      <select name="id_tipo_evento" required>
+        <option value="">Selecciona un tipo</option>
+        {tipos.map((tipo) => <option value={tipo.id_tipo_evento} selected={String(tipo.id_tipo_evento) === String(valores.id_tipo_evento ?? '')}>{tipo.nombre}</option>)}
+      </select>
+    </label>
+    <label>Organizador
+      <select name="id_organizador" required>
+        <option value="">Selecciona un organizador</option>
+        {organizadores.map((organizador) => <option value={organizador.id_organizador} selected={String(organizador.id_organizador) === String(valores.id_organizador ?? '')}>{organizador.nombre} {organizador.apellido}</option>)}
+      </select>
+    </label>
+    <label>Ubicación
+      <select name="id_ubicacion" required>
+        <option value="">Selecciona una ubicación</option>
+        {ubicaciones.map((ubicacion) => <option value={ubicacion.id_ubicacion} selected={String(ubicacion.id_ubicacion) === String(valores.id_ubicacion ?? '')}>{ubicacion.nombre} · capacidad {ubicacion.capacidad}</option>)}
+      </select>
+    </label>
+    <label>Fecha
+      <input type="date" name="fecha" value={valores.fecha ?? ''} required />
+    </label>
+    <label>Estado
+      <select name="estado" required>
+        {estados.map((estado) => <option value={estado} selected={estado === (valores.estado ?? 'Programado')}>{estado}</option>)}
+      </select>
+    </label>
+    <label>Hora de inicio
+      <input type="time" name="hora_inicio" value={valores.hora_inicio?.slice(0, 5) ?? ''} required />
+    </label>
+    <label>Hora de fin <span class="opcional">(opcional)</span>
+      <input type="time" name="hora_fin" value={valores.hora_fin?.slice(0, 5) ?? ''} />
+    </label>
+  </div>
+  <label>Descripción <span class="opcional">(opcional)</span>
+    <textarea name="descripcion" maxlength="300">{valores.descripcion ?? ''}</textarea>
+  </label>
+
+  <section class="panel">
+    <h2>Recursos del evento</h2>
+    <p class="ayuda">Escribe la cantidad requerida. Usa 0 cuando el evento no necesite ese recurso. Los recursos fuera de servicio no se pueden asignar a eventos activos.</p>
+    {recursos.length ? (
+      <div class="recursos-formulario">
+        {recursos.map((recurso) => {
+          const cantidad = Number(cantidades[recurso.id_recurso] ?? 0);
+          const noDisponible = !recurso.disponible && cantidad === 0;
+          const disponiblesEseDia = Math.max(0, Number(recurso.cantidad_total) - Number(recurso.comprometidos));
+          return (
+            <div class="recurso-fila">
+              <label for={`recurso-${recurso.id_recurso}`}>
+                <strong>{recurso.nombre}</strong>
+                {recurso.descripcion && <span class="ayuda">{recurso.descripcion}</span>}
+              </label>
+              <input
+                id={`recurso-${recurso.id_recurso}`}
+                type="number"
+                name={`recurso_${recurso.id_recurso}`}
+                min="0"
+                value={cantidad}
+                disabled={noDisponible}
+                aria-label={`Cantidad de ${recurso.nombre}`}
+              />
+              <span class={`estado-recurso etiqueta ${recurso.disponible ? 'ok' : 'no'}`}>
+                {recurso.disponible ? `${disponiblesEseDia} disponibles ese día` : 'Fuera de servicio'}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    ) : <p class="vacio">Registra recursos para poder agregarlos a los eventos.</p>}
+  </section>
+
+  <div class="acciones">
+    <button type="submit" disabled={!tipos.length || !organizadores.length || !ubicaciones.length}>{textoBoton}</button>
+    <a class="boton secundario" href="/eventos">Cancelar</a>
+  </div>
+</form>

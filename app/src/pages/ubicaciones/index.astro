@@ -1,0 +1,51 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import Alert from '../../components/Alert.astro';
+import { query } from '../../lib/db.js';
+import { describirError } from '../../lib/errores.js';
+
+let error = null;
+if (Astro.request.method === 'POST') {
+  const datos = await Astro.request.formData();
+  const id = Number(datos.get('id'));
+  if (datos.get('accion') === 'eliminar' && Number.isSafeInteger(id) && id > 0) {
+    try {
+      await query('DELETE FROM ubicacion WHERE id_ubicacion = $1', [id]);
+      return Astro.redirect('/ubicaciones?ok=eliminado', 303);
+    } catch (err) { error = describirError(err); }
+  }
+}
+
+const { rows } = await query(
+  `SELECT u.id_ubicacion, u.nombre, u.direccion, u.capacidad, COUNT(e.id_evento)::int AS eventos
+   FROM ubicacion u LEFT JOIN evento e ON e.id_ubicacion = u.id_ubicacion
+   GROUP BY u.id_ubicacion ORDER BY u.nombre`,
+);
+const okMensajes = { creado: 'Ubicación creada.', actualizado: 'Cambios guardados.', eliminado: 'Ubicación eliminada.' };
+const ok = okMensajes[Astro.url.searchParams.get('ok')] ?? '';
+---
+
+<Layout titulo="Ubicaciones">
+  <div class="encabezado">
+    <div><h1>Ubicaciones</h1><p>Administra las sedes y su capacidad para los eventos.</p></div>
+    <a class="boton" href="/ubicaciones/nuevo">Nueva ubicación</a>
+  </div>
+  <Alert error={error} ok={ok} />
+  {rows.length ? (
+    <div class="tabla-contenedor"><table>
+      <thead><tr><th>Nombre</th><th>Dirección</th><th>Capacidad</th><th>Eventos</th><th>Acciones</th></tr></thead>
+      <tbody>{rows.map((ubicacion) => (
+        <tr>
+          <td>{ubicacion.nombre}</td><td>{ubicacion.direccion}</td><td>{ubicacion.capacidad}</td><td>{ubicacion.eventos}</td>
+          <td><div class="acciones">
+            <a class="boton secundario" href={`/ubicaciones/${ubicacion.id_ubicacion}/editar`}>Editar</a>
+            <form method="POST" onsubmit="return confirm('¿Eliminar esta ubicación?');">
+              <input type="hidden" name="accion" value="eliminar" /><input type="hidden" name="id" value={ubicacion.id_ubicacion} />
+              <button class="peligro" type="submit">Eliminar</button>
+            </form>
+          </div></td>
+        </tr>
+      ))}</tbody>
+    </table></div>
+  ) : <div class="panel vacio">Aún no hay ubicaciones registradas.</div>}
+</Layout>

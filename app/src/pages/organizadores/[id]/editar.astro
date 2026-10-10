@@ -1,0 +1,56 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import OrganizadorForm from '../../../components/OrganizadorForm.astro';
+import { query } from '../../../lib/db.js';
+import { describirError } from '../../../lib/errores.js';
+import { texto } from '../../../lib/formularios.js';
+
+const id = Number(Astro.params.id);
+let valores = null;
+let error = null;
+
+if (Number.isSafeInteger(id) && id > 0) {
+  if (Astro.request.method === 'POST') {
+    const datos = await Astro.request.formData();
+    valores = {
+      nombre: texto(datos, 'nombre'),
+      apellido: texto(datos, 'apellido'),
+      correo: texto(datos, 'correo'),
+      telefono: texto(datos, 'telefono'),
+      cargo: texto(datos, 'cargo'),
+    };
+    try {
+      const resultado = await query(
+        `UPDATE organizador
+         SET nombre = $1, apellido = $2, correo = $3, telefono = $4, cargo = $5
+         WHERE id_organizador = $6`,
+        [valores.nombre, valores.apellido, valores.correo, valores.telefono, valores.cargo, id],
+      );
+      if (resultado.rowCount === 0) valores = null;
+      else return Astro.redirect('/organizadores?ok=actualizado', 303);
+    } catch (err) {
+      error = describirError(err);
+    }
+  } else {
+    const { rows } = await query(
+      `SELECT nombre, apellido, correo, telefono, cargo
+       FROM organizador WHERE id_organizador = $1`,
+      [id],
+    );
+    valores = rows[0] ?? null;
+  }
+}
+
+if (!valores) Astro.response.status = 404;
+---
+
+<Layout titulo="Editar organizador">
+  <div class="encabezado">
+    <div><h1>Editar organizador</h1><p>Actualiza los datos de contacto y responsabilidad.</p></div>
+  </div>
+  {valores ? (
+    <OrganizadorForm valores={valores} error={error} textoBoton="Guardar cambios" />
+  ) : (
+    <section class="panel"><p>El organizador no existe.</p><a href="/organizadores">Volver al listado</a></section>
+  )}
+</Layout>

@@ -1,0 +1,11 @@
+---
+const { error = null, ok = '' } = Astro.props;
+---
+
+{ok && <div class="alerta ok" role="status">{ok}</div>}
+{error && (
+  <div class="alerta error" role="alert">
+    <strong>{error.resumen ?? error}</strong>
+    {error.tecnico && <code>{error.tecnico}</code>}
+  </div>
+)}

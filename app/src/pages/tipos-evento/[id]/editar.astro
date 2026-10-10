@@ -1,0 +1,35 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import CatalogForm from '../../../components/CatalogForm.astro';
+import { query } from '../../../lib/db.js';
+import { describirError } from '../../../lib/errores.js';
+import { texto } from '../../../lib/formularios.js';
+
+const id = Number(Astro.params.id);
+const campos = [
+  { nombre: 'nombre', etiqueta: 'Nombre', requerido: true, maxlength: 50 },
+  { nombre: 'descripcion', etiqueta: 'Descripción', tipo: 'textarea', opcional: true, maxlength: 200 },
+];
+let valores = null;
+let error = null;
+if (Number.isSafeInteger(id) && id > 0) {
+  if (Astro.request.method === 'POST') {
+    const datos = await Astro.request.formData();
+    valores = { nombre: texto(datos, 'nombre'), descripcion: texto(datos, 'descripcion') };
+    try {
+      const result = await query('UPDATE tipo_evento SET nombre = $1, descripcion = $2 WHERE id_tipo_evento = $3', [valores.nombre, valores.descripcion, id]);
+      if (result.rowCount) return Astro.redirect('/tipos-evento?ok=actualizado', 303);
+      valores = null;
+    } catch (err) { error = describirError(err); }
+  } else {
+    const result = await query('SELECT nombre, descripcion FROM tipo_evento WHERE id_tipo_evento = $1', [id]);
+    valores = result.rows[0] ?? null;
+  }
+}
+if (!valores) Astro.response.status = 404;
+---
+
+<Layout titulo="Editar tipo de evento">
+  <div class="encabezado"><div><h1>Editar tipo de evento</h1><p>Modifica el nombre o la descripción de la categoría.</p></div></div>
+  {valores ? <CatalogForm campos={campos} valores={valores} error={error} textoBoton="Guardar cambios" cancelar="/tipos-evento" /> : <div class="panel"><p>El tipo de evento no existe.</p><a href="/tipos-evento">Volver al listado</a></div>}
+</Layout>

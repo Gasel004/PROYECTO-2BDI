@@ -1,0 +1,82 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import Alert from '../../components/Alert.astro';
+import { query } from '../../lib/db.js';
+import { describirError } from '../../lib/errores.js';
+import { enteroPositivo, fechaAISO } from '../../lib/validaciones.js';
+
+const id = enteroPositivo(Astro.params.id);
+let error = null;
+if (Astro.request.method === 'POST' && id) {
+  const datos = await Astro.request.formData();
+  if (datos.get('accion') === 'eliminar') {
+    try {
+      await query('DELETE FROM evento WHERE id_evento = $1', [id]);
+      return Astro.redirect('/eventos?ok=eliminado', 303);
+    } catch (err) { error = describirError(err); }
+  }
+}
+
+let evento = null;
+let recursos = [];
+if (id) {
+  const resultado = await query(
+    `SELECT e.id_evento, e.nombre, e.descripcion, e.fecha, e.hora_inicio, e.hora_fin, e.estado,
+            t.nombre AS tipo, o.nombre AS nombre_organizador, o.apellido AS apellido_organizador,
+            o.correo, o.telefono, u.nombre AS ubicacion, u.direccion, u.capacidad
+     FROM evento e
+     JOIN tipo_evento t ON t.id_tipo_evento = e.id_tipo_evento
+     JOIN organizador o ON o.id_organizador = e.id_organizador
+     JOIN ubicacion u ON u.id_ubicacion = e.id_ubicacion
+     WHERE e.id_evento = $1`,
+    [id],
+  );
+  const registro = resultado.rows[0];
+  evento = registro ? { ...registro, fecha: fechaAISO(registro.fecha) } : null;
+  if (evento) {
+    const detalle = await query(
+      `SELECT r.id_recurso, r.nombre, r.disponible, er.cantidad
+       FROM evento_recurso er JOIN recurso r ON r.id_recurso = er.id_recurso
+       WHERE er.id_evento = $1 ORDER BY r.nombre`,
+      [id],
+    );
+    recursos = detalle.rows;
+  }
+}
+if (!evento) Astro.response.status = 404;
+const ok = Astro.url.searchParams.get('ok') === 'actualizado' ? 'Cambios guardados.' : '';
+---
+
+<Layout titulo={evento?.nombre ?? 'Evento'}>
+  {evento ? (
+    <>
+      <div class="encabezado">
+        <div><a href="/eventos">← Volver a eventos</a><h1 style="margin-top: .5rem">{evento.nombre}</h1><p>{evento.fecha} · {evento.hora_inicio.slice(0, 5)}{evento.hora_fin ? `–${evento.hora_fin.slice(0, 5)}` : ''} · <span class="etiqueta">{evento.estado}</span></p></div>
+        <div class="acciones"><a class="boton" href={`/eventos/${id}/editar`}>Editar evento</a>
+          <form method="POST" onsubmit="return confirm('¿Eliminar el evento y sus recursos asociados?');">
+            <input type="hidden" name="accion" value="eliminar" /><button class="peligro" type="submit">Eliminar</button>
+          </form>
+        </div>
+      </div>
+      <Alert error={error} ok={ok} />
+      <div class="rejilla">
+        <section class="panel"><h2>Datos del evento</h2>
+          <p><strong>Tipo:</strong> {evento.tipo}</p>
+          <p><strong>Descripción:</strong> {evento.descripcion ?? 'Sin descripción'}</p>
+          <p><strong>Organizador:</strong> {evento.nombre_organizador} {evento.apellido_organizador}</p>
+          <p><strong>Contacto:</strong> <a href={`mailto:${evento.correo}`}>{evento.correo}</a>{evento.telefono ? ` · ${evento.telefono}` : ''}</p>
+        </section>
+        <section class="panel"><h2>Ubicación</h2>
+          <p><strong>{evento.ubicacion}</strong></p><p>{evento.direccion}</p><p>Capacidad: {evento.capacidad} personas</p>
+        </section>
+      </div>
+      <section style="margin-top: 1rem"><h2>Recursos requeridos</h2>
+        {recursos.length ? (
+          <div class="tabla-contenedor"><table><thead><tr><th>Recurso</th><th>Cantidad</th><th>Estado actual</th></tr></thead>
+            <tbody>{recursos.map((recurso) => <tr><td>{recurso.nombre}</td><td>{recurso.cantidad}</td><td><span class={`etiqueta ${recurso.disponible ? 'ok' : 'no'}`}>{recurso.disponible ? 'En servicio' : 'Fuera de servicio'}</span></td></tr>)}</tbody>
+          </table></div>
+        ) : <div class="panel vacio">Este evento no tiene recursos asignados.</div>}
+      </section>
+    </>
+  ) : <section class="panel"><h1>Evento no encontrado</h1><p>El evento solicitado no existe.</p><a href="/eventos">Volver al listado</a></section>}
+</Layout>

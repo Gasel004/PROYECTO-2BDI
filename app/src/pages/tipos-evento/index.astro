@@ -1,0 +1,53 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import Alert from '../../components/Alert.astro';
+import { query } from '../../lib/db.js';
+import { describirError } from '../../lib/errores.js';
+
+let error = null;
+if (Astro.request.method === 'POST') {
+  const datos = await Astro.request.formData();
+  const id = Number(datos.get('id'));
+  if (datos.get('accion') === 'eliminar' && Number.isSafeInteger(id) && id > 0) {
+    try {
+      await query('DELETE FROM tipo_evento WHERE id_tipo_evento = $1', [id]);
+      return Astro.redirect('/tipos-evento?ok=eliminado', 303);
+    } catch (err) {
+      error = describirError(err);
+    }
+  }
+}
+
+const { rows } = await query(
+  `SELECT t.id_tipo_evento, t.nombre, t.descripcion, COUNT(e.id_evento)::int AS eventos
+   FROM tipo_evento t LEFT JOIN evento e ON e.id_tipo_evento = t.id_tipo_evento
+   GROUP BY t.id_tipo_evento ORDER BY t.nombre`,
+);
+const okMensajes = { creado: 'Tipo de evento creado.', actualizado: 'Cambios guardados.', eliminado: 'Tipo de evento eliminado.' };
+const ok = okMensajes[Astro.url.searchParams.get('ok')] ?? '';
+---
+
+<Layout titulo="Tipos de evento">
+  <div class="encabezado">
+    <div><h1>Tipos de evento</h1><p>Clasifica las actividades para facilitar su consulta.</p></div>
+    <a class="boton" href="/tipos-evento/nuevo">Nuevo tipo</a>
+  </div>
+  <Alert error={error} ok={ok} />
+  {rows.length ? (
+    <div class="tabla-contenedor"><table>
+      <thead><tr><th>Nombre</th><th>Descripción</th><th>Eventos</th><th>Acciones</th></tr></thead>
+      <tbody>{rows.map((tipo) => (
+        <tr>
+          <td>{tipo.nombre}</td><td>{tipo.descripcion ?? '—'}</td><td>{tipo.eventos}</td>
+          <td><div class="acciones">
+            <a class="boton secundario" href={`/tipos-evento/${tipo.id_tipo_evento}/editar`}>Editar</a>
+            <form method="POST" onsubmit="return confirm('¿Eliminar este tipo de evento?');">
+              <input type="hidden" name="accion" value="eliminar" /><input type="hidden" name="id" value={tipo.id_tipo_evento} />
+              <button class="peligro" type="submit">Eliminar</button>
+            </form>
+          </div></td>
+        </tr>
+      ))}</tbody>
+    </table></div>
+  ) : <div class="panel vacio">Aún no hay tipos de evento registrados.</div>}
+</Layout>

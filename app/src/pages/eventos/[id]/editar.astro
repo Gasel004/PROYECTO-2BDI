@@ -1,0 +1,58 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import EventoForm from '../../../components/EventoForm.astro';
+import { cargarCatalogosEvento } from '../../../lib/datos-evento.js';
+import { guardarEvento, leerCantidadesRecursos } from '../../../lib/eventos.js';
+import { describirError } from '../../../lib/errores.js';
+import { query } from '../../../lib/db.js';
+import { texto } from '../../../lib/formularios.js';
+import { fechaAISO } from '../../../lib/validaciones.js';
+
+const id = Number(Astro.params.id);
+let valores = null;
+let cantidades = {};
+let error = null;
+if (Number.isSafeInteger(id) && id > 0) {
+  if (Astro.request.method === 'POST') {
+    const datos = await Astro.request.formData();
+    valores = {
+      nombre: texto(datos, 'nombre'), descripcion: texto(datos, 'descripcion'), fecha: texto(datos, 'fecha'),
+      hora_inicio: texto(datos, 'hora_inicio'), hora_fin: texto(datos, 'hora_fin'), estado: texto(datos, 'estado'),
+      id_tipo_evento: texto(datos, 'id_tipo_evento'), id_organizador: texto(datos, 'id_organizador'),
+      id_ubicacion: texto(datos, 'id_ubicacion'),
+    };
+    try {
+      const filas = leerCantidadesRecursos(datos);
+      cantidades = Object.fromEntries(filas.map((fila) => [fila.idRecurso, fila.cantidad]));
+      await guardarEvento({ id, valores, cantidades: filas });
+      return Astro.redirect(`/eventos/${id}?ok=actualizado`, 303);
+    } catch (err) {
+      error = err.userMessage || err instanceof Error && !err.code
+        ? { resumen: err.message }
+        : describirError(err);
+    }
+  } else {
+    const evento = await query(
+      `SELECT id_evento, nombre, descripcion, fecha, hora_inicio, hora_fin, estado,
+              id_tipo_evento, id_organizador, id_ubicacion
+       FROM evento WHERE id_evento = $1`,
+      [id],
+    );
+    const registro = evento.rows[0];
+    valores = registro ? { ...registro, fecha: fechaAISO(registro.fecha) } : null;
+    if (valores) {
+      const detalle = await query('SELECT id_recurso, cantidad FROM evento_recurso WHERE id_evento = $1', [id]);
+      cantidades = Object.fromEntries(detalle.rows.map((fila) => [fila.id_recurso, fila.cantidad]));
+    }
+  }
+}
+if (!valores) Astro.response.status = 404;
+const { tipos, organizadores, ubicaciones, recursos } = await cargarCatalogosEvento(valores?.fecha, id);
+---
+
+<Layout titulo="Editar evento">
+  <div class="encabezado"><div><h1>Editar evento</h1><p>Actualiza el maestro y reemplaza las cantidades de recursos del detalle.</p></div></div>
+  {valores ? (
+    <EventoForm valores={valores} cantidades={cantidades} tipos={tipos} organizadores={organizadores} ubicaciones={ubicaciones} recursos={recursos} error={error} textoBoton="Guardar cambios" />
+  ) : <div class="panel"><p>El evento no existe.</p><a href="/eventos">Volver al listado</a></div>}
+</Layout>

@@ -1,0 +1,28 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import CatalogForm from '../../components/CatalogForm.astro';
+import { query } from '../../lib/db.js';
+import { describirError } from '../../lib/errores.js';
+import { texto } from '../../lib/formularios.js';
+
+const campos = [
+  { nombre: 'nombre', etiqueta: 'Nombre', requerido: true, maxlength: 80 },
+  { nombre: 'direccion', etiqueta: 'Dirección', requerido: true, maxlength: 150 },
+  { nombre: 'capacidad', etiqueta: 'Capacidad', tipo: 'number', requerido: true, min: 1 },
+];
+let valores = { nombre: '', direccion: '', capacidad: '' };
+let error = null;
+if (Astro.request.method === 'POST') {
+  const datos = await Astro.request.formData();
+  valores = { nombre: texto(datos, 'nombre'), direccion: texto(datos, 'direccion'), capacidad: texto(datos, 'capacidad') };
+  try {
+    await query('INSERT INTO ubicacion (nombre, direccion, capacidad) VALUES ($1, $2, $3)', [valores.nombre, valores.direccion, valores.capacidad]);
+    return Astro.redirect('/ubicaciones?ok=creado', 303);
+  } catch (err) { error = describirError(err); }
+}
+---
+
+<Layout titulo="Nueva ubicación">
+  <div class="encabezado"><div><h1>Nueva ubicación</h1><p>Agrega una sede disponible para programar eventos.</p></div></div>
+  <CatalogForm campos={campos} valores={valores} error={error} textoBoton="Crear ubicación" cancelar="/ubicaciones" />
+</Layout>

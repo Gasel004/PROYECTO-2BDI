@@ -1,0 +1,36 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import CatalogForm from '../../../components/CatalogForm.astro';
+import { query } from '../../../lib/db.js';
+import { describirError } from '../../../lib/errores.js';
+import { texto } from '../../../lib/formularios.js';
+
+const id = Number(Astro.params.id);
+const campos = [
+  { nombre: 'nombre', etiqueta: 'Nombre', requerido: true, maxlength: 80 },
+  { nombre: 'direccion', etiqueta: 'Dirección', requerido: true, maxlength: 150 },
+  { nombre: 'capacidad', etiqueta: 'Capacidad', tipo: 'number', requerido: true, min: 1 },
+];
+let valores = null;
+let error = null;
+if (Number.isSafeInteger(id) && id > 0) {
+  if (Astro.request.method === 'POST') {
+    const datos = await Astro.request.formData();
+    valores = { nombre: texto(datos, 'nombre'), direccion: texto(datos, 'direccion'), capacidad: texto(datos, 'capacidad') };
+    try {
+      const result = await query('UPDATE ubicacion SET nombre = $1, direccion = $2, capacidad = $3 WHERE id_ubicacion = $4', [valores.nombre, valores.direccion, valores.capacidad, id]);
+      if (result.rowCount) return Astro.redirect('/ubicaciones?ok=actualizado', 303);
+      valores = null;
+    } catch (err) { error = describirError(err); }
+  } else {
+    const result = await query('SELECT nombre, direccion, capacidad FROM ubicacion WHERE id_ubicacion = $1', [id]);
+    valores = result.rows[0] ?? null;
+  }
+}
+if (!valores) Astro.response.status = 404;
+---
+
+<Layout titulo="Editar ubicación">
+  <div class="encabezado"><div><h1>Editar ubicación</h1><p>Actualiza la información de la sede.</p></div></div>
+  {valores ? <CatalogForm campos={campos} valores={valores} error={error} textoBoton="Guardar cambios" cancelar="/ubicaciones" /> : <div class="panel"><p>La ubicación no existe.</p><a href="/ubicaciones">Volver al listado</a></div>}
+</Layout>

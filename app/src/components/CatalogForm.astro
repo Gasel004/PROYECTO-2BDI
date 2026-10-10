@@ -1,0 +1,67 @@
+---
+const {
+  campos,
+  valores = {},
+  error = null,
+  textoBoton = 'Guardar',
+  cancelar = '/',
+} = Astro.props;
+---
+
+{error && (
+  <div class="alerta error" role="alert">
+    <strong>{error.resumen}</strong>
+    {error.tecnico && <code>{error.tecnico}</code>}
+  </div>
+)}
+
+<form method="POST" class="formulario compacto">
+  {campos.map((campo) => (
+    <label>
+      {campo.etiqueta}
+      {campo.opcional && <span class="opcional">(opcional)</span>}
+      {campo.tipo === 'textarea' ? (
+        <textarea
+          name={campo.nombre}
+          maxlength={campo.maxlength}
+          required={campo.requerido ?? false}
+        >{valores[campo.nombre] ?? ''}</textarea>
+      ) : campo.tipo === 'select' ? (
+        <select name={campo.nombre} required={campo.requerido ?? false}>
+          <option value="">Selecciona una opción</option>
+          {campo.opciones.map((opcion) => (
+            <option
+              value={opcion.valor}
+              selected={String(opcion.valor) === String(valores[campo.nombre] ?? '')}
+            >
+              {opcion.etiqueta}
+            </option>
+          ))}
+        </select>
+      ) : campo.tipo === 'checkbox' ? (
+        <span>
+          <input
+            type="checkbox"
+            name={campo.nombre}
+            value="true"
+            checked={valores[campo.nombre] === true || valores[campo.nombre] === 'true'}
+          />
+          {campo.ayuda && <span class="opcional"> {campo.ayuda}</span>}
+        </span>
+      ) : (
+        <input
+          type={campo.tipo ?? 'text'}
+          name={campo.nombre}
+          value={valores[campo.nombre] ?? ''}
+          maxlength={campo.maxlength}
+          min={campo.min}
+          required={campo.requerido ?? false}
+        />
+      )}
+    </label>
+  ))}
+  <div class="acciones">
+    <button type="submit">{textoBoton}</button>
+    <a class="boton secundario" href={cancelar}>Cancelar</a>
+  </div>
+</form>

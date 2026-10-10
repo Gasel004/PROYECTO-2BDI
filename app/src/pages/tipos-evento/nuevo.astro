@@ -1,0 +1,27 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import CatalogForm from '../../components/CatalogForm.astro';
+import { query } from '../../lib/db.js';
+import { describirError } from '../../lib/errores.js';
+import { texto } from '../../lib/formularios.js';
+
+const campos = [
+  { nombre: 'nombre', etiqueta: 'Nombre', requerido: true, maxlength: 50 },
+  { nombre: 'descripcion', etiqueta: 'Descripción', tipo: 'textarea', opcional: true, maxlength: 200 },
+];
+let valores = { nombre: '', descripcion: '' };
+let error = null;
+if (Astro.request.method === 'POST') {
+  const datos = await Astro.request.formData();
+  valores = { nombre: texto(datos, 'nombre'), descripcion: texto(datos, 'descripcion') };
+  try {
+    await query('INSERT INTO tipo_evento (nombre, descripcion) VALUES ($1, $2)', [valores.nombre, valores.descripcion]);
+    return Astro.redirect('/tipos-evento?ok=creado', 303);
+  } catch (err) { error = describirError(err); }
+}
+---
+
+<Layout titulo="Nuevo tipo de evento">
+  <div class="encabezado"><div><h1>Nuevo tipo de evento</h1><p>Define una categoría para clasificar los eventos.</p></div></div>
+  <CatalogForm campos={campos} valores={valores} error={error} textoBoton="Crear tipo" cancelar="/tipos-evento" />
+</Layout>

@@ -1,0 +1,40 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import EventoForm from '../../components/EventoForm.astro';
+import { cargarCatalogosEvento } from '../../lib/datos-evento.js';
+import { guardarEvento, leerCantidadesRecursos } from '../../lib/eventos.js';
+import { describirError } from '../../lib/errores.js';
+import { texto } from '../../lib/formularios.js';
+
+let valores = {
+  nombre: '', descripcion: '', fecha: '', hora_inicio: '', hora_fin: '', estado: 'Programado',
+  id_tipo_evento: '', id_organizador: '', id_ubicacion: '',
+};
+let cantidades = {};
+let error = null;
+if (Astro.request.method === 'POST') {
+  const datos = await Astro.request.formData();
+  valores = {
+    nombre: texto(datos, 'nombre'), descripcion: texto(datos, 'descripcion'), fecha: texto(datos, 'fecha'),
+    hora_inicio: texto(datos, 'hora_inicio'), hora_fin: texto(datos, 'hora_fin'), estado: texto(datos, 'estado'),
+    id_tipo_evento: texto(datos, 'id_tipo_evento'), id_organizador: texto(datos, 'id_organizador'),
+    id_ubicacion: texto(datos, 'id_ubicacion'),
+  };
+  try {
+    const filas = leerCantidadesRecursos(datos);
+    cantidades = Object.fromEntries(filas.map((fila) => [fila.idRecurso, fila.cantidad]));
+    await guardarEvento({ valores, cantidades: filas });
+    return Astro.redirect('/eventos?ok=creado', 303);
+  } catch (err) {
+    error = err.userMessage || err instanceof Error && !err.code
+      ? { resumen: err.message }
+      : describirError(err);
+  }
+}
+const { tipos, organizadores, ubicaciones, recursos } = await cargarCatalogosEvento(valores.fecha);
+---
+
+<Layout titulo="Nuevo evento">
+  <div class="encabezado"><div><h1>Nuevo evento</h1><p>Completa los datos del evento y asigna las cantidades de recursos que necesita.</p></div></div>
+  <EventoForm valores={valores} cantidades={cantidades} tipos={tipos} organizadores={organizadores} ubicaciones={ubicaciones} recursos={recursos} error={error} textoBoton="Crear evento" />
+</Layout>

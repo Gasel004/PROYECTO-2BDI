@@ -1,0 +1,71 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import Alert from '../../components/Alert.astro';
+import { query } from '../../lib/db.js';
+import { describirError } from '../../lib/errores.js';
+
+let error = null;
+if (Astro.request.method === 'POST') {
+  const datos = await Astro.request.formData();
+  const id = Number(datos.get('id'));
+  if (datos.get('accion') === 'eliminar' && Number.isSafeInteger(id) && id > 0) {
+    try {
+      await query('DELETE FROM organizador WHERE id_organizador = $1', [id]);
+      return Astro.redirect('/organizadores?ok=eliminado', 303);
+    } catch (err) {
+      error = describirError(err);
+    }
+  }
+}
+
+const { rows } = await query(
+  `SELECT o.id_organizador, o.nombre, o.apellido, o.correo, o.telefono, o.cargo,
+          COUNT(e.id_evento)::int AS eventos
+   FROM organizador o
+   LEFT JOIN evento e ON e.id_organizador = o.id_organizador
+   GROUP BY o.id_organizador
+   ORDER BY o.apellido, o.nombre`,
+);
+const okMensajes = {
+  creado: 'Organizador creado.',
+  actualizado: 'Cambios guardados.',
+  eliminado: 'Organizador eliminado.',
+};
+const ok = okMensajes[Astro.url.searchParams.get('ok')] ?? '';
+---
+
+<Layout titulo="Organizadores">
+  <div class="encabezado">
+    <div><h1>Organizadores</h1><p>Administra las personas responsables de los eventos.</p></div>
+    <a class="boton" href="/organizadores/nuevo">Nuevo organizador</a>
+  </div>
+  <Alert error={error} ok={ok} />
+  {rows.length ? (
+    <div class="tabla-contenedor">
+      <table>
+        <thead><tr><th>Nombre</th><th>Correo</th><th>Teléfono</th><th>Cargo</th><th>Eventos</th><th>Acciones</th></tr></thead>
+        <tbody>
+          {rows.map((organizador) => (
+            <tr>
+              <td>{organizador.nombre} {organizador.apellido}</td>
+              <td><a href={`mailto:${organizador.correo}`}>{organizador.correo}</a></td>
+              <td>{organizador.telefono ?? '—'}</td>
+              <td>{organizador.cargo ?? '—'}</td>
+              <td>{organizador.eventos}</td>
+              <td>
+                <div class="acciones">
+                  <a class="boton secundario" href={`/organizadores/${organizador.id_organizador}/editar`}>Editar</a>
+                  <form method="POST" onsubmit="return confirm('¿Eliminar este organizador?');">
+                    <input type="hidden" name="accion" value="eliminar" />
+                    <input type="hidden" name="id" value={organizador.id_organizador} />
+                    <button class="peligro" type="submit">Eliminar</button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  ) : <div class="panel vacio">Aún no hay organizadores registrados.</div>}
+</Layout>

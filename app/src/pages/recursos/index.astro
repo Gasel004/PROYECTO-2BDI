@@ -1,0 +1,76 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import Alert from '../../components/Alert.astro';
+import { query } from '../../lib/db.js';
+import { describirError } from '../../lib/errores.js';
+import { fechaISOValida } from '../../lib/validaciones.js';
+
+let error = null;
+if (Astro.request.method === 'POST') {
+  const datos = await Astro.request.formData();
+  const id = Number(datos.get('id'));
+  if (datos.get('accion') === 'eliminar' && Number.isSafeInteger(id) && id > 0) {
+    try {
+      await query('DELETE FROM recurso WHERE id_recurso = $1', [id]);
+      const fechaParam = Astro.url.searchParams.get('fecha');
+      return Astro.redirect(`/recursos?ok=eliminado${fechaParam ? `&fecha=${encodeURIComponent(fechaParam)}` : ''}`, 303);
+    } catch (err) { error = describirError(err); }
+  }
+}
+
+const fechaParam = Astro.url.searchParams.get('fecha') ?? '';
+const fechaInvalida = fechaParam !== '' && !fechaISOValida(fechaParam);
+const fecha = fechaISOValida(fechaParam) ? fechaParam : null;
+const { rows } = await query(
+  `SELECT r.id_recurso, r.nombre, r.descripcion, r.cantidad_total, r.disponible,
+          COALESCE(SUM(er.cantidad) FILTER (WHERE e.id_evento IS NOT NULL), 0)::int AS comprometidos
+   FROM recurso r
+   LEFT JOIN evento_recurso er ON er.id_recurso = r.id_recurso
+   LEFT JOIN evento e ON e.id_evento = er.id_evento
+     AND e.fecha = $1::date AND e.estado <> 'Cancelado'
+   GROUP BY r.id_recurso
+   ORDER BY r.nombre`,
+  [fecha],
+);
+if (fechaInvalida) error = { resumen: 'Escribe una fecha válida para consultar disponibilidad.' };
+const okMensajes = { creado: 'Recurso creado.', actualizado: 'Cambios guardados.', eliminado: 'Recurso eliminado.' };
+const ok = okMensajes[Astro.url.searchParams.get('ok')] ?? '';
+---
+
+<Layout titulo="Recursos">
+  <div class="encabezado">
+    <div><h1>Recursos</h1><p>Controla el inventario y consulta compromisos por fecha.</p></div>
+    <a class="boton" href="/recursos/nuevo">Nuevo recurso</a>
+  </div>
+  <Alert error={error} ok={ok} />
+  <form class="filtros panel" method="GET">
+    <label>Disponibilidad para una fecha
+      <input type="date" name="fecha" value={fechaParam} />
+    </label>
+    <button type="submit">Consultar</button>
+    {fecha && <a class="boton secundario" href="/recursos">Limpiar</a>}
+  </form>
+  <div class="tabla-contenedor"><table>
+    <thead><tr><th>Recurso</th><th>Inventario</th>{fecha && <th>Comprometidos</th>}{fecha && <th>Disponibles ese día</th>}<th>Estado</th><th>Acciones</th></tr></thead>
+    <tbody>{rows.map((recurso) => {
+      const restantes = Math.max(0, recurso.cantidad_total - recurso.comprometidos);
+      return (
+        <tr>
+          <td><strong>{recurso.nombre}</strong>{recurso.descripcion && <div class="ayuda">{recurso.descripcion}</div>}</td>
+          <td>{recurso.cantidad_total}</td>
+          {fecha && <td>{recurso.comprometidos}</td>}
+          {fecha && <td>{recurso.disponible ? restantes : '—'}</td>}
+          <td><span class={`etiqueta ${recurso.disponible ? 'ok' : 'no'}`}>{recurso.disponible ? 'Disponible' : 'Fuera de servicio'}</span></td>
+          <td><div class="acciones">
+            <a class="boton secundario" href={`/recursos/${recurso.id_recurso}/editar`}>Editar</a>
+            <form method="POST" onsubmit="return confirm('¿Eliminar este recurso?');">
+              <input type="hidden" name="accion" value="eliminar" /><input type="hidden" name="id" value={recurso.id_recurso} />
+              <button class="peligro" type="submit">Eliminar</button>
+            </form>
+          </div></td>
+        </tr>
+      );
+    })}</tbody>
+  </table></div>
+  {fecha && <p class="ayuda">Los eventos cancelados no descuentan inventario. La disponibilidad se calcula por día, sin considerar horas.</p>}
+</Layout>

@@ -1,0 +1,136 @@
+---
+import Layout from '../layouts/Layout.astro';
+import { query } from '../lib/db.js';
+import { describirError } from '../lib/errores.js';
+import { fechaAISO } from '../lib/validaciones.js';
+
+let conteos = null;
+let proximoEvento = null;
+let agenda = [];
+let error = null;
+try {
+  const result = await query(
+    `SELECT
+       (SELECT COUNT(*)::int FROM evento) AS eventos,
+       (SELECT COUNT(*)::int FROM organizador) AS organizadores,
+       (SELECT COUNT(*)::int FROM recurso) AS recursos,
+       (SELECT COUNT(*)::int FROM evento WHERE fecha >= CURRENT_DATE AND estado <> 'Cancelado') AS proximos`,
+  );
+  conteos = result.rows[0];
+  const agendaQuery = await Promise.all([
+    query(
+      `SELECT e.id_evento, e.nombre, e.fecha, e.hora_inicio, e.estado,
+              t.nombre AS tipo, u.nombre AS ubicacion,
+              o.nombre AS nombre_organizador, o.apellido AS apellido_organizador
+       FROM evento e
+       JOIN tipo_evento t ON t.id_tipo_evento = e.id_tipo_evento
+       JOIN ubicacion u ON u.id_ubicacion = e.id_ubicacion
+       JOIN organizador o ON o.id_organizador = e.id_organizador
+       WHERE e.fecha >= CURRENT_DATE AND e.estado <> 'Cancelado'
+       ORDER BY e.fecha, e.hora_inicio
+       LIMIT 1`,
+    ),
+    query(
+      `SELECT e.id_evento, e.nombre, e.fecha, e.hora_inicio, e.estado,
+              t.nombre AS tipo, u.nombre AS ubicacion
+       FROM evento e
+       JOIN tipo_evento t ON t.id_tipo_evento = e.id_tipo_evento
+       JOIN ubicacion u ON u.id_ubicacion = e.id_ubicacion
+       WHERE e.fecha >= CURRENT_DATE AND e.estado <> 'Cancelado'
+       ORDER BY e.fecha, e.hora_inicio
+       LIMIT 5`,
+    ),
+  ]);
+  const proximo = agendaQuery[0].rows[0];
+  proximoEvento = proximo ? { ...proximo, fecha: fechaAISO(proximo.fecha) } : null;
+  agenda = agendaQuery[1].rows.map((evento) => ({ ...evento, fecha: fechaAISO(evento.fecha) }));
+} catch (err) {
+  error = describirError(err);
+}
+
+const periodo = new Intl.DateTimeFormat('es-GT', { month: 'long', year: 'numeric' }).format(new Date());
+const fechaCorta = (fecha) => {
+  const [anio, mes, dia] = fecha.split('-').map(Number);
+  const fechaLocal = new Date(Date.UTC(anio, mes - 1, dia));
+  return {
+    dia: new Intl.DateTimeFormat('es-GT', { day: '2-digit', timeZone: 'UTC' }).format(fechaLocal),
+    mes: new Intl.DateTimeFormat('es-GT', { month: 'short', timeZone: 'UTC' }).format(fechaLocal).replace('.', ''),
+  };
+};
+const fechaAgenda = (fecha) => new Intl.DateTimeFormat('es-GT', {
+  weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC',
+}).format(new Date(`${fecha}T12:00:00Z`)).replace('.', '');
+---
+
+<Layout titulo="Resumen">
+  <section class="dashboard-hero">
+    <div>
+      <p class="eyebrow">Agenda</p>
+      <p class="periodo-agenda">{periodo}</p>
+      <h1>Coordina tus eventos fácilmente</h1>
+    </div>
+    <div class="hero-lado">
+      <div><strong>Listo para planificar</strong><span>Eventos, espacios y recursos</span></div>
+      <a class="boton" href="/eventos/nuevo">Programar evento</a>
+    </div>
+  </section>
+
+  {error && <div class="alerta error" role="status"><strong>No fue posible conectar con la base de datos.</strong><p>Confirma que PostgreSQL esté activo y revisa DATABASE_URL en la configuración local.</p></div>}
+
+  {conteos && (
+    <section class="estadisticas" aria-label="Resumen del sistema">
+      <a class="estadistica" href="/eventos"><strong>{conteos.eventos}</strong><span>Eventos registrados</span></a>
+      <a class="estadistica" href="/eventos?proximos=1"><strong>{conteos.proximos}</strong><span>Próximos en agenda</span></a>
+      <a class="estadistica" href="/organizadores"><strong>{conteos.organizadores}</strong><span>Personas organizadoras</span></a>
+      <a class="estadistica" href="/recursos"><strong>{conteos.recursos}</strong><span>Recursos en inventario</span></a>
+    </section>
+  )}
+
+  {proximoEvento ? (
+    <section aria-labelledby="siguiente-titulo">
+      <div class="encabezado">
+        <div><h2 id="siguiente-titulo">Próximo evento</h2></div>
+        <a href="/eventos?proximos=1">Abrir agenda</a>
+      </div>
+      <article class="siguiente-evento">
+        <div class="fecha-sello" aria-label={fechaAgenda(proximoEvento.fecha)}>
+          <strong>{fechaCorta(proximoEvento.fecha).dia}</strong><span class="fecha-sello-label">{fechaCorta(proximoEvento.fecha).mes}</span>
+        </div>
+        <div>
+          <p class="seccion-kicker">{proximoEvento.tipo} / {proximoEvento.hora_inicio.slice(0, 5)}</p>
+          <h3>{proximoEvento.nombre}</h3>
+          <p>Organiza: {proximoEvento.nombre_organizador} {proximoEvento.apellido_organizador}. Lugar: {proximoEvento.ubicacion}.</p>
+        </div>
+        <a class="boton secundario" href={`/eventos/${proximoEvento.id_evento}`}>Ver ficha</a>
+      </article>
+    </section>
+  ) : conteos && (
+    <section class="panel vacio"><p class="seccion-kicker">Agenda próxima</p><h2>No hay eventos próximos</h2><p>Cuando programes la siguiente actividad, aparecerá aquí con su espacio y responsable.</p><a class="boton" href="/eventos/nuevo">Crear primer evento</a></section>
+  )}
+
+  {agenda.length > 0 && (
+    <section class="dashboard-columns">
+      <div>
+        <div class="encabezado"><div><h2>Agenda próxima</h2></div><a href="/eventos?proximos=1">Todos los eventos</a></div>
+        <ul class="lista-agenda">
+          {agenda.map((evento) => (
+            <li>
+              <time datetime={evento.fecha}>{fechaAgenda(evento.fecha)} / {evento.hora_inicio.slice(0, 5)}</time>
+              <div><a href={`/eventos/${evento.id_evento}`}>{evento.nombre}</a><small>{evento.tipo} en {evento.ubicacion}</small></div>
+              <span class="etiqueta">{evento.estado}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+      <aside>
+        <h2>Administración</h2>
+        <nav class="rutas-rapidas" aria-label="Accesos administrativos">
+          <a href="/organizadores">Directorio de organizadores</a>
+          <a href="/recursos">Inventario y disponibilidad</a>
+          <a href="/tipos-evento">Tipos de actividad</a>
+          <a href="/ubicaciones">Espacios y capacidad</a>
+        </nav>
+      </aside>
+    </section>
+  )}
+</Layout>
