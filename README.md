@@ -1,5 +1,5 @@
 # Proyecto II: Gestión de eventos
-
+# Documento generado con IA (.md)
 Proyecto académico del curso **Bases de Datos 1**, el cúal permite administrar eventos, organizadores, tipos de evento, ubicaciones y recursos, cada evento puede asociarse con varios recursos y cantidades mediante una relación maestro-detalle
 ##
 - Enlance al video: [text](https://youtu.be/bpWPFkX-HmI)
